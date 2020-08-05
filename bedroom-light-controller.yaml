@@ -1,0 +1,174 @@
+esphome:
+  name: bedroom_light_controller
+  platform: ESP8266
+  board: nodemcuv2
+  
+globals:
+  - id: light1_on
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: light2_on
+    type: int
+    restore_value: no
+    initial_value: '0'
+    
+wifi:
+  ssid: "your ssid"
+  password: "your password"
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Bedroom-Light-Controller"
+
+captive_portal:
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  password: "your password"
+  reboot_timeout: 0s
+
+ota:
+  password: "your password"
+
+output:
+  - platform: esp8266_pwm
+    pin: GPIO2
+    #frequency: 1000 Hz
+    id: bedroom_pwm_light1
+  - platform: esp8266_pwm
+    pin: GPIO4
+    #frequency: 1000 Hz
+    id: bedroom_pwm_light2
+    
+# Example usage in a light
+light:
+  - platform: monochromatic
+    output: bedroom_pwm_light1
+    name: "bedroom_night_light1"
+    default_transition_length: 2s
+    id: bedroom_night_light1
+    restore_mode: RESTORE_DEFAULT_OFF
+  - platform: monochromatic
+    output: bedroom_pwm_light2
+    name: "bedroom_night_light2"
+    default_transition_length: 2s
+    id: bedroom_night_light2
+    restore_mode: RESTORE_DEFAULT_OFF
+
+i2c:
+  sda: GPIO12
+  scl: GPIO14
+  scan: True
+  
+sensor:
+  - platform: bh1750
+    name: "bedroom_Illuminance1"
+    address: 0x23
+    update_interval: 5s
+    id: bedroom_illuminance1
+    resolution: "4.0"
+    filters:
+      - lambda: return int(x);
+    # on_value:
+    #   then:
+    #     - mqtt.publish:
+    #         topic: "/foggy/bedroom-main/lux"
+    #         payload: !lambda "return ::to_string(x);"
+#  - platform: dht
+#    pin: D2
+#    model: DHT22
+#    temperature:
+#      name: "bedroom-main Temperature"
+#      id: bedroom_temperature
+#    humidity:
+#      name: "bedroom-main Humidity"
+#      id: bedroom_humidity
+#    update_interval: 10s
+    
+binary_sensor:
+  - platform: gpio
+    pin: GPIO5
+    name: "bedroom_motion1"
+    device_class: motion
+    filters:
+      - delayed_on: 100ms
+    on_press:
+      then:
+        - if:
+            condition:
+              lambda: |-
+                return id(bedroom_illuminance1).state < 4;
+            then:
+              if:
+                condition:
+                  lambda: |-
+                    return id(light1_on) == 0;
+                then:
+                  - light.turn_on:
+                      id: bedroom_night_light1
+                      brightness: 60%
+                      transition_length: 2s
+                  - lambda: 'id(light1_on) = 1;'
+                  - delay: 30s
+                  - light.turn_off:
+                      id: bedroom_night_light1
+                      transition_length: 2s
+                  - lambda: 'id(light1_on) = 0;'
+    # on_release:
+    #   then:
+    #     - delay: 6s
+    #     - light.turn_off:
+    #         id: bedroom_night_light1
+    #         transition_length: 2s
+            
+  - platform: gpio
+    pin: GPIO13
+    name: "bedroom_motion2"
+    device_class: motion
+    filters:
+      - delayed_on: 100ms
+    on_press:
+      then:
+        - if:
+            condition:
+              lambda: |-
+                return id(bedroom_illuminance1).state < 4;
+            then:
+              if:
+                condition:
+                  lambda: |-
+                    return id(light2_on) == 0;
+                then:
+                  - light.turn_on:
+                      id: bedroom_night_light2
+                      brightness: 70%
+                      transition_length: 2s
+                  - lambda: 'id(light2_on) = 1;'
+                  - delay: 30s
+                  - light.turn_off:
+                      id: bedroom_night_light2
+                      transition_length: 2s
+                  - lambda: 'id(light2_on) = 0;'
+          
+mqtt:
+  broker: 192.168.0.100   
+  username: your username
+  password: yourpassword
+  # on_message:
+  #   - topic: "/foggy/bedroom-main/pwm"
+  #     qos: 0
+  #     then:
+  #       - light.turn_on:
+  #           id: bedroom_light_strip
+  #           brightness: !lambda |-
+  #             double temp = ::atof(x.c_str());
+  #             return temp/100;
+  #       - mqtt.publish:
+  #           topic: "/foggy/test_reply"
+  #           payload: !lambda "return x;"
+
+
